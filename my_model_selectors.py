@@ -76,9 +76,17 @@ class SelectorBIC(ModelSelector):
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        # Build model candidates list
+        modelcandidates = []
+        for n in range(self.min_n_components, self.max_n_components):
+            model = self.base_model(n)
+            bic = -2 * model.score(self.X) + n * math.log(self.lengths)  
+            modelcandidates.append( (bic, model) )
 
+        # Select the best model in BIC context
+        (_, bestmodel) = min(modelcandidates) 
+
+        return bestmodel
 
 class SelectorDIC(ModelSelector):
     ''' select best model based on Discriminative Information Criterion
@@ -92,9 +100,28 @@ class SelectorDIC(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        # Build model candidates list
+        modelcandidates = []
+        for n in range(self.min_n_components, self.max_n_components):
+            model = self.base_model(n)
+            modelcandidates.append(model)
 
+        # Calc summary of all log likelihood
+        scoresum = 0
+        for m in modelcandidates:
+            scoresum += m.score(self.X)
+
+        # Calc the DIC for each model candidate and put into a dictationary
+        modeldic = {}
+        for m in modelcandidates:
+            modeldic[m] = m.score(self.X) - 1/(len(modelcandidates) - 1)*(scoresum - m.score(self.X))
+        
+        # Select the best model in DIC context
+        (_, bestmodel) = min(modeldic) 
+        
+        ## TODO Verify min/max
+
+        return bestmodel
 
 class SelectorCV(ModelSelector):
     ''' select best model based on average log Likelihood of cross-validation folds
@@ -102,7 +129,25 @@ class SelectorCV(ModelSelector):
     '''
 
     def select(self):
+
+        def get_model_cv(self, num_of_state):
+            total, index = 0
+            for cv_train_idx, cv_test_idx in KFold().split(self.all_word_sequences):
+                hmm_model = GaussianHMM(n_components=num_of_state, covariance_type="diag", n_iter=1000,
+                                    random_state=self.random_state, verbose=False).fit(cv_train_idx_X, cv_train_idx_lengths)
+                total = total + hmm_model.score(cv_test_idx_X, cv_test_idx_lengths)
+                index = index + 1
+
+            return total/index 
+
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # TODO implement model selection using CV
-        raise NotImplementedError
+        # Build array which element is (average_likelihood, model)
+        modelcandidates = []
+        for n in range(self.min_n_components, self.max_n_components):
+            model = self.base_model(n)
+            modelcandidates.append( (get_model_cv(n), model) )
+
+        (_, bestmodel) = max(modelcandidates)
+
+        return bestmodel
