@@ -18,10 +18,7 @@ def recognize(models: dict, test_set: SinglesData):
            ['WORDGUESS0', 'WORDGUESS1', 'WORDGUESS2',...]
    """
     warnings.filterwarnings("ignore", category=DeprecationWarning)
-    print("asl_single_data: get_all_sequences:{}".format(test_set.get_all_sequences()))
-    print("asl_single_data: get_all_Xlengths:{}".format(test_set.get_all_Xlengths()))
-    print("asl_single_data: get_item_sequences:{}".format(test_set.get_item_sequences(0)))
-    print("asl_single_data: get_item_Xlengths:{}".format(test_set.get_item_Xlengths(0)))
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
     probabilities = []
     guesses = []
 
@@ -31,8 +28,19 @@ def recognize(models: dict, test_set: SinglesData):
         recog_dict = {}
         for model_word in models.keys(): # e.g. ['FISH', 'JOHN', 'BREAD']
             model = models[model_word]
-            recog_dict[model_word] = model.score(test_set.get_item_Xlengths(wid))
+            item_X, item_lengths = test_set.get_item_Xlengths(wid)
+            try:
+                recog_dict[model_word] = model.score(item_X, item_lengths)
+            except:
+                recog_dict[model_word] = float("-inf")
         probabilities.append(recog_dict)
 
+    # Calculate guesses
+    for wid in word_ids:
+        guesses.append(max(probabilities[wid]))
+
+    for wid in range(0,5):
+        print("For sequence {}, the probabilities dict is {} and the guess list is {}".format(test_set.get_item_sequences(wid), probabilities[wid], guesses[wid]))
+
     # return probabilities, guesses
-    return (None, None)
+    return (probabilities, guesses)
