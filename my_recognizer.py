@@ -18,8 +18,21 @@ def recognize(models: dict, test_set: SinglesData):
            ['WORDGUESS0', 'WORDGUESS1', 'WORDGUESS2',...]
    """
     warnings.filterwarnings("ignore", category=DeprecationWarning)
+    print("asl_single_data: get_all_sequences:{}".format(test_set.get_all_sequences()))
+    print("asl_single_data: get_all_Xlengths:{}".format(test_set.get_all_Xlengths()))
+    print("asl_single_data: get_item_sequences:{}".format(test_set.get_item_sequences(0)))
+    print("asl_single_data: get_item_Xlengths:{}".format(test_set.get_item_Xlengths(0)))
     probabilities = []
     guesses = []
-    # TODO implement the recognizer
+
+    # Calculate Probabilities
+    word_ids = test_set.get_all_sequences().keys() # e.g. [0,1,2,3]
+    for wid in word_ids:
+        recog_dict = {}
+        for model_word in models.keys(): # e.g. ['FISH', 'JOHN', 'BREAD']
+            model = models[model_word]
+            recog_dict[model_word] = model.score(test_set.get_item_Xlengths(wid))
+        probabilities.append(recog_dict)
+
     # return probabilities, guesses
-    raise NotImplementedError
+    return (None, None)
