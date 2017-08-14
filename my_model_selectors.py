@@ -76,17 +76,26 @@ class SelectorBIC(ModelSelector):
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # Build model candidates list
-        modelcandidates = []
-        for n in range(self.min_n_components, self.max_n_components):
-            model = self.base_model(n)
-            bic = -2 * model.score(self.X) + n * math.log(self.lengths)  
-            modelcandidates.append( (bic, model) )
+        try:
 
-        # Select the best model in BIC context
-        (_, bestmodel) = min(modelcandidates) 
+            # Build model candidates list
+            modelcandidates = []
+            for n in range(self.min_n_components, self.max_n_components):
+                model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
+                                    random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+                log_likelihood = model.score(self.X, self.lengths)
+                log_datapoint = math.log(len(self.lengths))
+                bic = -2 * log_likelihood + n * log_datapoint
+                modelcandidates.append( (bic, model) )
 
-        return bestmodel
+            # Select the best model in BIC context
+            (_, bestmodel) = min(modelcandidates) 
+    
+            return bestmodel
+
+        except:
+
+            return None
 
 class SelectorDIC(ModelSelector):
     ''' select best model based on Discriminative Information Criterion
@@ -100,28 +109,35 @@ class SelectorDIC(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        # Build model candidates list
-        modelcandidates = []
-        for n in range(self.min_n_components, self.max_n_components):
-            model = self.base_model(n)
-            modelcandidates.append(model)
+        try:
+            # Buildild model candidates list
+            model_list = [] 
+            for n in range(self.min_n_components, self.max_n_components):
+                model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
+                                    random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+                model_list.append(model)
+    
+            # Calc summary of all log likelihood
+            scoresum = 0
+            for m in model_list:
+                scoresum = scoresum + m.score(self.X, self.lengths)
+    
+            # Calc the DIC for each model candidate and put into a dictationary
+            modelcandidates = []
+            for m in model_list:
+                score = m.score(self.X, self.lengths)
+                dic = score - 1/(len(model_list) - 1)*(scoresum - score) 
+                modelcandidates.append( (dic, m) )
+         
+            # Select the best model in DIC context
+            ## TODO Verify min/max
+            (_, bestmodel) = min(modelcandidates) 
+         
+            return bestmodel
 
-        # Calc summary of all log likelihood
-        scoresum = 0
-        for m in modelcandidates:
-            scoresum += m.score(self.X)
+        except:
 
-        # Calc the DIC for each model candidate and put into a dictationary
-        modeldic = {}
-        for m in modelcandidates:
-            modeldic[m] = m.score(self.X) - 1/(len(modelcandidates) - 1)*(scoresum - m.score(self.X))
-        
-        # Select the best model in DIC context
-        (_, bestmodel) = min(modeldic) 
-        
-        ## TODO Verify min/max
-
-        return bestmodel
+            return None
 
 class SelectorCV(ModelSelector):
     ''' select best model based on average log Likelihood of cross-validation folds
@@ -131,14 +147,15 @@ class SelectorCV(ModelSelector):
     def select(self):
 
         def get_model_cv(self, num_of_state):
-            total, index = 0
-            for cv_train_idx, cv_test_idx in KFold().split(self.all_word_sequences):
+            t, i = 0
+            split_method = KFold()
+            for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
                 hmm_model = GaussianHMM(n_components=num_of_state, covariance_type="diag", n_iter=1000,
                                     random_state=self.random_state, verbose=False).fit(cv_train_idx_X, cv_train_idx_lengths)
-                total = total + hmm_model.score(cv_test_idx_X, cv_test_idx_lengths)
-                index = index + 1
+                t = t + hmm_model.score(cv_test_idx_X, cv_test_idx_lengths)
+                i = i + 1
 
-            return total/index 
+            return t/i 
 
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -146,7 +163,7 @@ class SelectorCV(ModelSelector):
         modelcandidates = []
         for n in range(self.min_n_components, self.max_n_components):
             model = self.base_model(n)
-            modelcandidates.append( (get_model_cv(n), model) )
+            modelcandidates.append( (get_model_cv(self, n), model) )
 
         (_, bestmodel) = max(modelcandidates)
 
