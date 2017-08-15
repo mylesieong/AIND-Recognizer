@@ -144,23 +144,25 @@ class SelectorCV(ModelSelector):
     def select(self):
 
         def get_model_cv(self, num_of_state):
-            t, i = 0
+            t, n = 0.
             split_method = KFold()
             for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
                 hmm_model = GaussianHMM(n_components=num_of_state, covariance_type="diag", n_iter=1000,
                                     random_state=self.random_state, verbose=False).fit(cv_train_idx_X, cv_train_idx_lengths)
                 t = t + hmm_model.score(cv_test_idx_X, cv_test_idx_lengths)
-                i = i + 1
+                n = n + 1.
 
-            return t/i 
+            return t/n 
 
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # Build array which element is (average_likelihood, model)
         modelcandidates = []
         for n in range(self.min_n_components, self.max_n_components):
-            model = self.base_model(n)
-            modelcandidates.append( (get_model_cv(self, n), model) )
+            model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
+                                random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+            cv = get_model_cv(self, n)
+            modelcandidates.append( (cv, model) )
 
         (_, bestmodel) = max(modelcandidates)
 
