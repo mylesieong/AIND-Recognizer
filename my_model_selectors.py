@@ -76,26 +76,23 @@ class SelectorBIC(ModelSelector):
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-        try:
-
-            # Build model candidates list
-            modelcandidates = []
-            for n in range(self.min_n_components, self.max_n_components):
+        # Build model candidates list
+        modelcandidates = []
+        for n in range(self.min_n_components, self.max_n_components):
+            try:
                 model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
-                                    random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+                                random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
                 log_likelihood = model.score(self.X, self.lengths)
                 log_datapoint = math.log(len(self.lengths))
                 bic = -2 * log_likelihood + n * log_datapoint
                 modelcandidates.append( (bic, model) )
+            except:
+                modelcandidates.append( (float("inf"), None) )
 
-            # Select the best model in BIC context
-            (_, bestmodel) = min(modelcandidates) 
+        # Select the best model in BIC context
+        (_, bestmodel) = min(modelcandidates) 
     
-            return bestmodel
-
-        except:
-
-            return None
+        return bestmodel
 
 class SelectorDIC(ModelSelector):
     ''' select best model based on Discriminative Information Criterion
