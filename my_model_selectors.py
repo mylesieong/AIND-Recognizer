@@ -106,10 +106,38 @@ class SelectorDIC(ModelSelector):
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+        # Build model candidate list
+        model_applicant = []
+        for n in range(self.min_n_components, self.max_n_components):
+            try:
+                model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
+                                    random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+                likelihood = model.score(self.X, self.lengths)
+                model_applicant.append( (model, likelihood) )
+            except:
+                print("Skip model with {} states building.".format(n))
+        
+        # Calc summary of all log likelihood
+        lsum = sum([l for m, l in model_applicant])
+ 
+        # Calc the DIC for each model candidate and put into a dictationary
+        modelcandidates = []
+        for m, l in model_applicant:
+            dic = l - 1/(len(model_applicant) - 1)*(lsum - l) 
+            modelcandidates.append( (dic, m) )
+     
+        # Select the best model in DIC context
+        ## TODO Verify min/max
+        (_, bestmodel) = min(modelcandidates) 
+     
+        return bestmodel
+
+'''
         try:
             # Buildild model candidates list
             model_list = [] 
             for n in range(self.min_n_components, self.max_n_components):
+
                 model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
                                     random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
                 model_list.append(model)
@@ -135,6 +163,7 @@ class SelectorDIC(ModelSelector):
         except:
 
             return None
+            '''
 
 class SelectorCV(ModelSelector):
     ''' select best model based on average log Likelihood of cross-validation folds
