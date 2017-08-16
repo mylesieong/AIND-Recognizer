@@ -75,6 +75,7 @@ class SelectorBIC(ModelSelector):
         :return: GaussianHMM object
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
 
         # Build model candidates list
         modelcandidates = []
@@ -90,7 +91,13 @@ class SelectorBIC(ModelSelector):
                 modelcandidates.append( (float("inf"), None) )
 
         # Select the best model in BIC context
-        (_, bestmodel) = min(modelcandidates) 
+        bestmodel = None
+        bestbic = float("inf")
+        for b, m in modelcandidates:
+            if b < bestbic:
+                bestmodel = m
+                bestbic = b 
+     
     
         return bestmodel
 
@@ -105,6 +112,7 @@ class SelectorDIC(ModelSelector):
 
     def select(self):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
 
         # Build model candidate list
         model_applicant = []
@@ -115,19 +123,25 @@ class SelectorDIC(ModelSelector):
                 likelihood = model.score(self.X, self.lengths)
                 model_applicant.append( (model, likelihood) )
             except:
-                print("Skip model with {} states building.".format(n))
+                pass
         
         # Calc summary of all log likelihood
         lsum = sum([l for m, l in model_applicant])
  
         # Calc the DIC for each model candidate and put into a dictationary
         modelcandidates = []
-        for m, l in model_applicant:
-            dic = l - 1/(len(model_applicant) - 1)*(lsum - l) 
-            modelcandidates.append( (dic, m) )
+        if len(model_applicant) > 1:
+            for m, l in model_applicant:
+                dic = l - 1/(len(model_applicant) - 1)*(lsum - l) 
+                modelcandidates.append( (dic, m) )
      
         # Select the best model in DIC context
-        (_, bestmodel) = max(modelcandidates) 
+        bestmodel = None
+        bestdic = float("-inf")
+        for d, m in modelcandidates:
+            if d > bestdic:
+                bestmodel = m
+                bestdic = d 
      
         return bestmodel
 
@@ -137,8 +151,8 @@ class SelectorCV(ModelSelector):
     '''
 
     def select(self):
-
         warnings.filterwarnings("ignore", category=DeprecationWarning)
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
 
         def sequence_2_Xlengths(seq):
             rX = []
@@ -148,11 +162,23 @@ class SelectorCV(ModelSelector):
                 rl.append(len(x))
             return (rX, rl)
 
-        def get_model_cv(self, num_of_state, split_method):
+        def get_model_cv(self, num_of_state, split_method=None):
 
             l_list = []
             seqs = self.sequences
 
+            # When sample size is too small to have fold return cv as logL
+            if not split_method:
+                try:
+                    fullX, fulllengths = sequence_2_Xlengths(seqs)
+                    m = GaussianHMM(n_components=num_of_state, covariance_type="diag", n_iter=1000,
+                                random_state=self.random_state, verbose=False).fit(fullX, fulllengths)
+                    l = m.score(fullX, fulllengths)
+                    return l
+                except:
+                    return float("-inf")
+
+            
             for cv_train_idx, cv_test_idx in split_method.split(seqs):
                 try:
 
@@ -164,42 +190,46 @@ class SelectorCV(ModelSelector):
 
                     m = GaussianHMM(n_components=num_of_state, covariance_type="diag", n_iter=1000,
                                 random_state=self.random_state, verbose=False).fit(trainX, trainlengths)
+
                     l = m.score(testX, testlengths)
                     l_list.append(l)
+
                 except:
-                    print("Exception in model scoring. Train seq:{}, Test seq:{}".format(train_sequences, test_sequences))
+                    pass
 
             # Check the case if all model cannot score
-            if np.mean(l_list) == 0:
+            if len(l_list) == 0:
                 cv = float("-inf")
             else:
                 cv = np.mean(l_list)
 
             return cv
-            '''
-            t, n = 0.
-            split_method = KFold()
-            for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
-                hmm_model = GaussianHMM(n_components=num_of_state, covariance_type="diag", n_iter=1000,
-                                    random_state=self.random_state, verbose=False).fit(cv_train_idx_X, cv_train_idx_lengths)
-                t = t + hmm_model.score(cv_test_idx_X, cv_test_idx_lengths)
-                n = n + 1.
-
-            return t/n 
-            '''
 
         # Build array which element is (average_likelihood, model)
         modelcandidates = []
-        for n in range(self.min_n_components, self.max_n_components):
-            model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
-                                random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
-            if len(self.lengths) < 3:
-                split_method = KFold(len(self.lengths))
-            else:
-                split_method = KFold()
-            cv = get_model_cv(self, n, split_method)
-            modelcandidates.append( (cv, model) )
 
-        (_, bestmodel) = max(modelcandidates)
+        for n in range(self.min_n_components, self.max_n_components):
+
+            try:
+                model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
+                                random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
+
+                if len(self.lengths) < 3:
+                    cv = get_model_cv(self, n, None)
+                else:
+                    split_method = KFold()
+                    cv = get_model_cv(self, n, split_method)
+    
+                modelcandidates.append( (cv, model) )
+            except:
+                pass
+    
+        # Select the best model in CV
+        bestmodel = None
+        bestcv = float("-inf")
+        for c, m in modelcandidates:
+            if c > bestcv:
+                bestmodel = m
+                bestcv = c
 
         return bestmodel
