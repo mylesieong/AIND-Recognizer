@@ -127,43 +127,9 @@ class SelectorDIC(ModelSelector):
             modelcandidates.append( (dic, m) )
      
         # Select the best model in DIC context
-        ## TODO Verify min/max
-        (_, bestmodel) = min(modelcandidates) 
+        (_, bestmodel) = max(modelcandidates) 
      
         return bestmodel
-
-'''
-        try:
-            # Buildild model candidates list
-            model_list = [] 
-            for n in range(self.min_n_components, self.max_n_components):
-
-                model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
-                                    random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
-                model_list.append(model)
-    
-            # Calc summary of all log likelihood
-            scoresum = 0
-            for m in model_list:
-                scoresum = scoresum + m.score(self.X, self.lengths)
-    
-            # Calc the DIC for each model candidate and put into a dictationary
-            modelcandidates = []
-            for m in model_list:
-                score = m.score(self.X, self.lengths)
-                dic = score - 1/(len(model_list) - 1)*(scoresum - score) 
-                modelcandidates.append( (dic, m) )
-         
-            # Select the best model in DIC context
-            ## TODO Verify min/max
-            (_, bestmodel) = min(modelcandidates) 
-         
-            return bestmodel
-
-        except:
-
-            return None
-            '''
 
 class SelectorCV(ModelSelector):
     ''' select best model based on average log Likelihood of cross-validation folds
@@ -172,7 +138,45 @@ class SelectorCV(ModelSelector):
 
     def select(self):
 
-        def get_model_cv(self, num_of_state):
+        warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+        def sequence_2_Xlengths(seq):
+            rX = []
+            rl = []
+            for x in seq:
+                rX = rX + x
+                rl.append(len(x))
+            return (rX, rl)
+
+        def get_model_cv(self, num_of_state, split_method):
+
+            l_list = []
+            seqs = self.sequences
+
+            for cv_train_idx, cv_test_idx in split_method.split(seqs):
+                try:
+
+                    train_sequences = [seqs[k] for k in cv_train_idx]
+                    trainX, trainlengths = sequence_2_Xlengths(train_sequences)
+
+                    test_sequences = [seqs[k] for k in cv_test_idx]
+                    testX, testlengths = sequence_2_Xlengths(test_sequences)
+
+                    m = GaussianHMM(n_components=num_of_state, covariance_type="diag", n_iter=1000,
+                                random_state=self.random_state, verbose=False).fit(trainX, trainlengths)
+                    l = m.score(testX, testlengths)
+                    l_list.append(l)
+                except:
+                    print("Exception in model scoring. Train seq:{}, Test seq:{}".format(train_sequences, test_sequences))
+
+            # Check the case if all model cannot score
+            if np.mean(l_list) == 0:
+                cv = float("-inf")
+            else:
+                cv = np.mean(l_list)
+
+            return cv
+            '''
             t, n = 0.
             split_method = KFold()
             for cv_train_idx, cv_test_idx in split_method.split(self.sequences):
@@ -182,15 +186,18 @@ class SelectorCV(ModelSelector):
                 n = n + 1.
 
             return t/n 
-
-        warnings.filterwarnings("ignore", category=DeprecationWarning)
+            '''
 
         # Build array which element is (average_likelihood, model)
         modelcandidates = []
         for n in range(self.min_n_components, self.max_n_components):
             model = GaussianHMM(n_components=n, covariance_type="diag", n_iter=1000,
                                 random_state=self.random_state, verbose=False).fit(self.X, self.lengths)
-            cv = get_model_cv(self, n)
+            if len(self.lengths) < 3:
+                split_method = KFold(len(self.lengths))
+            else:
+                split_method = KFold()
+            cv = get_model_cv(self, n, split_method)
             modelcandidates.append( (cv, model) )
 
         (_, bestmodel) = max(modelcandidates)
